@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -eu
+
+printf '%s\n' "Running checks before push..."
+pnpm lint
+pnpm test

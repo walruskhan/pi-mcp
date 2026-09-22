@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+set -eu
+
+git diff --cached --name-only --diff-filter=ACMR -z | xargs -0 -r detect-secrets-hook
+
+printf '%s\n' "Running checks before commit..."
+pnpm check

@@ -1,0 +1,32 @@
+node_modules/
+.pnpm-store/
+.devbox/
+
+# TypeScript/tool caches
+*.tsbuildinfo
+.npm/
+
+# Test and build output
+coverage/
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Pi/local development state
+.pi/

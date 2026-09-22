@@ -1,0 +1,32 @@
+{
+  "name": "pi-mcp",
+  "version": "0.1.0",
+  "description": "MCP Extension for pi",
+  "keywords": [
+    "pi-package"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./extensions/main.ts"
+    ]
+  },
+  "scripts": {
+    "check": "find extensions -name '*.ts' -print0 | xargs -0 -r -n 1 node --experimental-strip-types --check",
+    "lint": "biome lint extensions",
+    "lint-fix": "biome lint --write extensions",
+    "hooks:install": "git config core.hooksPath .githooks",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.9",
+    "@types/node": "^22.0.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "dependencies": {
+    "pi-mcp-adapter": "2.36.0"
+  }
+}

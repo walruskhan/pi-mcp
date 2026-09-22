@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.18.3/.schema/devbox.schema.json",
+  "packages": [
+    "nodejs@22",
+    "pnpm@10",
+    "just@latest",
+    "detect-secrets@latest"
+  ],
+  "shell": {
+    "init_hook": [
+      "pnpm install --ignore-scripts --frozen-lockfile --strict-peer-dependencies --config.minimum-release-age=10080 --config.block-exotic-subdeps=true"
+    ]
+  }
+}
