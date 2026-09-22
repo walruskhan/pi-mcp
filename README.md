@@ -1,28 +1,40 @@
 # pi-mcp
 
 Lightweight MCP server management extension for [Pi](https://pi.dev). It
-manages standard MCP configuration files and provides a manual MCP test
-console without bundling a full Pi MCP adapter.
+manages standard MCP configuration files and exposes configured servers to the
+agent through a single gateway tool, without bundling a full Pi MCP adapter.
 
 ## Commands
 
-- `/mcp` — list configured MCP servers and the lightweight runtime status.
+- `/mcp` — list configured MCP servers with their runtime status and start
+  them on demand.
 - `/mcp-add` — open a wizard for adding a local command or remote HTTP server,
   including environment variables and authentication.
 - `/mcp-configure` — update an existing server's environment variables, bearer
   authentication, working directory, HTTP headers, and autostart behavior.
 - `/mcp-remove` — choose and remove a server from the project or global config.
-- `/mcp-test` — choose a server, inspect its tools and input schema, enter JSON
-  arguments, and execute a tool manually.
 
 The add wizard writes either the project `.mcp.json` or the user-global
-`~/.config/mcp/mcp.json`, then reloads Pi. Servers with `autostart: true` are
-connected and their tools discovered when Pi starts. `/mcp-test` starts MCP connections
-lazily, discovers and caches tools for five minutes, retries a failed operation
-once by reconnecting, and supports bearer tokens through an environment
-variable. MCP tools are available manually through `/mcp-test` and to the agent through
-one lightweight `mcp` gateway tool. The gateway workflow is:
-`list_servers` → `list_tools` → `describe` (optional) → `call`.
+`~/.config/mcp/mcp.json`, then reloads Pi. Project entries take precedence over
+global entries with the same name.
+
+Connections are started lazily: tools are discovered and cached for five
+minutes, and a failed operation is retried once by reconnecting. Bearer tokens
+can be stored in the config or read from an environment variable, and `$VAR`
+and `${VAR}` references in environment values are expanded at launch.
+
+## Starting servers
+
+Servers with `autostart: true` connect when Pi starts. Everything else stays
+stopped until it is needed, so unused servers never spawn a process:
+
+- start one yourself from `/mcp`, or
+- let the agent request one. `list_servers` shows stopped servers, and the
+  agent must call `start` — which asks you to confirm — before it can use
+  their tools.
+
+The gateway workflow the agent follows is: `list_servers` → `start`
+(when stopped) → `list_tools` → `describe` (optional) → `call`.
 
 Command servers accept any executable and arguments, including for example:
 
@@ -35,6 +47,19 @@ pipx run mcp-server-fetch
 
 Only add commands and URLs you trust: command servers run with the permissions
 of the Pi process, and remote servers may receive data from MCP requests.
+
+## Architecture
+
+```text
+extensions/
+  main.ts                    entrypoint: commands, tool, lifecycle hooks
+  helpers/                   side effects (config I/O, MCP runtime, autostart)
+  ui/                        interactive menus, editors, and wizards
+  utils/                     pure domain logic and formatting
+```
+
+Each directory has a README describing its modules. `extensions/utils/` is
+kept deterministic and free of I/O so it can be unit tested directly.
 
 ## Development
 

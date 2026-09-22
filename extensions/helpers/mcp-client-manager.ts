@@ -1,19 +1,25 @@
+/**
+ * Lightweight MCP client runtime. Owns connections to configured servers,
+ * caches discovered tools, and retries a failed operation once by
+ * reconnecting. Used by the `/mcp*` commands, session autostart, and the
+ * `mcp` gateway tool.
+ */
 import { Client, StreamableHTTPClientTransport, type CallToolResult, type ListToolsResult } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import type { ServerDefinition } from "../utils/mcp.ts";
+import { resolveEnvironment, type ServerDefinition } from "../utils/mcp.ts";
 
-export type TestServerStatus = "connected" | "cached" | "failed" | "not-connected" | "disabled";
+export type ServerStatus = "connected" | "cached" | "failed" | "not-connected" | "disabled";
 
-export interface TestServer {
+export interface ManagedServer {
   name: string;
   definition: ServerDefinition;
-  status: TestServerStatus;
+  status: ServerStatus;
   toolCount: number;
   error?: string;
 }
 
-export interface TestMcpClient {
-  listServers(): TestServer[];
+export interface McpClient {
+  listServers(): ManagedServer[];
   listTools(serverName: string): Promise<ListToolsResult["tools"]>;
   callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<CallToolResult>;
   reconnect(serverName: string): Promise<void>;
@@ -33,16 +39,7 @@ interface ToolCache {
 
 const TOOL_CACHE_TTL_MS = 5 * 60 * 1000;
 
-function resolveEnvironment(environment: Record<string, string> | undefined): Record<string, string> | undefined {
-  if (!environment) return undefined;
-  return Object.fromEntries(Object.entries(environment).map(([key, value]) => [
-    key,
-    value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (_match, braced, plain) => process.env[braced ?? plain] ?? ""),
-  ]));
-}
-
-/** Lightweight MCP runtime for the manual test console. */
-export class McpTestManager implements TestMcpClient {
+export class McpClientManager implements McpClient {
   private readonly connections = new Map<string, Connection>();
   private readonly toolCache = new Map<string, ToolCache>();
   private readonly failures = new Map<string, string>();
@@ -52,7 +49,8 @@ export class McpTestManager implements TestMcpClient {
     this.servers = servers;
   }
 
-  listServers(): TestServer[] {
+  /** Snapshot of every configured server and its runtime status. */
+  listServers(): ManagedServer[] {
     return Object.entries(this.servers).map(([name, definition]) => {
       const cached = this.toolCache.get(name);
       const error = this.failures.get(name);
@@ -66,6 +64,7 @@ export class McpTestManager implements TestMcpClient {
     });
   }
 
+  /** List a server's tools, connecting on demand and caching the result. */
   async listTools(serverName: string): Promise<ListToolsResult["tools"]> {
     const cached = this.toolCache.get(serverName);
     if (cached && cached.expiresAt > Date.now()) return cached.tools;
@@ -81,12 +80,14 @@ export class McpTestManager implements TestMcpClient {
     return this.withReconnect(serverName, (connection) => connection.client.callTool({ name: toolName, arguments: args }));
   }
 
+  /** Drop and re-establish a server's connection, refreshing its tools. */
   async reconnect(serverName: string): Promise<void> {
     await this.disconnect(serverName);
     await this.connect(serverName);
     await this.listTools(serverName);
   }
 
+  /** Close all connections. Safe to call more than once. */
   async close(): Promise<void> {
     await Promise.all([...this.connections.keys()].map((name) => this.disconnect(name)));
   }
@@ -135,7 +136,7 @@ export class McpTestManager implements TestMcpClient {
         },
       })
       : definition.command
-        ? new StdioClientTransport({ command: definition.command, args: definition.args, cwd: definition.cwd, env: resolveEnvironment(definition.env), stderr: "pipe" })
+        ? new StdioClientTransport({ command: definition.command, args: definition.args, cwd: definition.cwd, env: resolveEnvironment(definition.env, process.env), stderr: "pipe" })
         : undefined;
     if (!transport) throw new Error(`Server ${serverName} has no command or URL`);
 

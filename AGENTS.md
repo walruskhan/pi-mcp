@@ -13,10 +13,15 @@ entrypoint.
   focused modules.
 - `extensions/utils/` — pure helper functions. Code here should be
   deterministic and free of I/O, global state, and other side effects.
+  Currently `mcp.ts` (MCP domain logic) and `text.ts` (formatting).
 - `extensions/helpers/` — helpers that may have side effects, such as Pi UI
   interaction, filesystem or network access, process execution, or state
-  mutation. Keep these effects explicit.
-- `test/` — unit and integration tests. Add tests here as the extension grows.
+  mutation. Keep these effects explicit. Currently `mcp-config.ts`,
+  `mcp-client-manager.ts`, `autostart.ts`, and `mcp-gateway.ts`.
+- `extensions/ui/` — interactive TUI code: `menu.ts` (select menu and text
+  prompt), `server-editor.ts` (definition editors), and `wizards.ts` (the
+  command flows).
+- `test/` — unit and integration tests, one file per module under test.
 - `.githooks/` — versioned pre-commit and pre-push checks. Install them with
   `just install-hooks`.
 - `devbox.json` and `devbox.lock` — pinned development tools and shell setup.
