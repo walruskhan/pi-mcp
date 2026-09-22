@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import { Container, matchesKey, type SelectItem, SelectList, Text } from "@earendil-works/pi-tui";
@@ -10,13 +10,21 @@ export { McpTestManager } from "./helpers/mcp-test-manager.ts";
 export type { TestMcpClient, TestServer } from "./helpers/mcp-test-manager.ts";
 import { formatServerDefinition, isValidServerName, splitCommandLine, type ServerDefinition } from "./utils/mcp.ts";
 
-function selectOption(ctx: ExtensionCommandContext, title: string, items: SelectItem[]): Promise<string | undefined> {
+type MenuItem = SelectItem & {
+  renderLabel?: (theme: Theme) => string;
+};
+
+function selectOption(ctx: ExtensionCommandContext, title: string, items: MenuItem[]): Promise<string | undefined> {
   if (!ctx.hasUI || !ctx.ui) return Promise.resolve(undefined);
   return ctx.ui.custom<string | null>((tui, theme, _keybindings, done) => {
     const container = new Container();
     container.addChild(new DynamicBorder((value) => theme.fg("accent", value)));
     container.addChild(new Text(theme.fg("accent", theme.bold(title)), 1, 0));
-    const list = new SelectList(items, Math.min(items.length, 8), {
+    const renderedItems = items.map(({ renderLabel, ...item }) => ({
+      ...item,
+      ...(renderLabel ? { label: renderLabel(theme) } : {}),
+    }));
+    const list = new SelectList(renderedItems, Math.min(renderedItems.length, 8), {
       selectedPrefix: (value) => theme.fg("accent", value),
       selectedText: (value) => theme.fg("accent", value),
       description: (value) => theme.fg("muted", value),
@@ -322,18 +330,45 @@ async function configureServerWizard(ctx: ExtensionCommandContext): Promise<void
     // Esc here returns to the server-selection parent menu. Esc inside one of
     // the individual editors only returns to this server submenu.
     while (true) {
-      const options: SelectItem[] = [];
+      const options: MenuItem[] = [];
       if (definition.command) {
-        options.push({ value: "environment", label: "Environment variables" });
-        options.push({ value: "working-directory", label: "Working directory" });
+        options.push({
+          value: "environment",
+          label: `Environment variables (${Object.keys(definition.env ?? {}).length})`,
+        });
+        const workingDirectory = definition.cwd?.trim();
+        options.push({
+          value: "working-directory",
+          label: "Working directory",
+          renderLabel: (theme) => `Working directory: ${workingDirectory ? shorten(workingDirectory) : theme.fg("dim", "none")}`,
+        });
       }
       if (definition.url) {
         options.push({ value: "authentication", label: "Authentication" });
         options.push({ value: "headers", label: "HTTP headers" });
       }
-      options.push({ value: "status", label: "Status" });
+      options.push({
+        value: "autostart",
+        label: `Autostart: ${definition.autostart ? "on" : "off"}`,
+        renderLabel: (theme) => `Autostart: ${definition.autostart ? theme.fg("success", "on") : "off"}`,
+      });
+      options.push({
+        value: "status",
+        label: `Status: ${definition.disabled ? "disabled" : "enabled"}`,
+        renderLabel: (theme) => `Status: ${definition.disabled ? "disabled" : theme.fg("success", "enabled")}`,
+      });
       const option = await selectOption(ctx, `Configure ${server.name}`, options);
       if (option === undefined) break;
+      if (option === "autostart") {
+        const nextAutostart = !definition.autostart;
+        const action = nextAutostart ? "Enable" : "Disable";
+        definition = { ...definition, ...(nextAutostart ? { autostart: true } : {}) };
+        if (!nextAutostart) delete definition.autostart;
+        await writeServer(server.path, server.name, definition);
+        modified = true;
+        ctx.ui.notify(`${action}d autostart for ${server.name}.`, "success");
+        continue;
+      }
       if (option === "status") {
         const runtime = new McpTestManager({ [server.name]: definition }).listServers()[0];
         const statusAction = await selectOption(ctx, `${server.name}: ${runtime?.status ?? "not-connected"}`, [
@@ -343,7 +378,6 @@ async function configureServerWizard(ctx: ExtensionCommandContext): Promise<void
         if (!statusAction || statusAction === "back") continue;
         const nextDisabled = statusAction === "disable";
         const action = nextDisabled ? "disable" : "enable";
-        if (!(await ctx.ui.confirm(`${action[0]?.toUpperCase()}${action.slice(1)} MCP server?`, `${server.name} in ${server.path}`))) continue;
         definition = { ...definition, ...(nextDisabled ? { disabled: true } : {}) };
         if (!nextDisabled) delete definition.disabled;
         await writeServer(server.path, server.name, definition);
@@ -395,6 +429,29 @@ async function removeServerWizard(ctx: ExtensionCommandContext): Promise<void> {
  */
 export default function (pi: ExtensionAPI) {
   let activeManager: McpTestManager | null = null;
+
+  pi.on("session_start", async (_event, ctx) => {
+    await activeManager?.close();
+    activeManager = null;
+    const entries = await configuredServers(ctx.cwd);
+    const definitions = Object.fromEntries([...entries].reverse().map(({ name, definition }) => [name, definition]));
+    const autostartNames = Object.entries(definitions)
+      .filter(([, definition]) => definition.autostart && !definition.disabled)
+      .map(([name]) => name);
+    if (autostartNames.length === 0) return;
+
+    const manager = new McpTestManager(definitions);
+    activeManager = manager;
+    await Promise.all(autostartNames.map(async (name) => {
+      try {
+        const tools = await manager.listTools(name);
+        ctx.ui.notify(`Autostarted ${name}; discovered ${tools.length} tool${tools.length === 1 ? "" : "s"}.`, "info");
+      } catch (error) {
+        ctx.ui.notify(`Could not autostart ${name}: ${error instanceof Error ? error.message : String(error)}`, "error");
+      }
+    }));
+
+  });
 
   pi.on("session_shutdown", async () => {
     await activeManager?.close();
@@ -453,10 +510,11 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "mcp",
     label: "MCP gateway",
-    description: "Discover and call tools from configured MCP servers. Use list_servers, then list_tools, then call with the exact server and tool name.",
+    description: "Discover and call tools from configured MCP servers. Use list_servers to see available and stopped servers, start a stopped server with start (which asks the user for confirmation), then use list_tools, describe, or call.",
     parameters: Type.Object({
       action: Type.Union([
         Type.Literal("list_servers"),
+        Type.Literal("start"),
         Type.Literal("list_tools"),
         Type.Literal("describe"),
         Type.Literal("call"),
@@ -465,13 +523,34 @@ export default function (pi: ExtensionAPI) {
       tool: Type.Optional(Type.String({ description: "Original MCP tool name" })),
       arguments: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
     }),
-    execute: async (_toolCallId, params) => {
+    execute: async (_toolCallId, params, _signal, _onUpdate, toolCtx) => {
       const manager = await getActiveManager();
       if (params.action === "list_servers") {
         return { content: [{ type: "text", text: JSON.stringify(manager.listServers(), null, 2) }], details: {} };
       }
       if (!params.server) {
         return { content: [{ type: "text", text: "The server parameter is required." }], details: { error: true } };
+      }
+      if (params.action === "start") {
+        const server = manager.listServers().find((candidate) => candidate.name === params.server);
+        if (!server) {
+          return { content: [{ type: "text", text: `Unknown MCP server: ${params.server}.` }], details: { error: true } };
+        }
+        if (server.status === "disabled") {
+          return { content: [{ type: "text", text: `MCP server ${params.server} is disabled and cannot be started.` }], details: { error: true } };
+        }
+        if (server.status === "connected" || server.status === "cached") {
+          return { content: [{ type: "text", text: `MCP server ${params.server} is already started.` }], details: {} };
+        }
+        if (!toolCtx.hasUI || !toolCtx.ui || !(await toolCtx.ui.confirm(`Start MCP server ${params.server}?`, "The model requested this server."))) {
+          return { content: [{ type: "text", text: `MCP server ${params.server} was not started.` }], details: { cancelled: true } };
+        }
+        const tools = await manager.listTools(params.server);
+        return { content: [{ type: "text", text: `Started ${params.server}; discovered ${tools.length} tool${tools.length === 1 ? "" : "s"}.` }], details: {} };
+      }
+      const server = manager.listServers().find((candidate) => candidate.name === params.server);
+      if (server && server.status === "not-connected") {
+        return { content: [{ type: "text", text: `MCP server ${params.server} is stopped. Ask the user to start it with action: start before accessing its tools.` }], details: { error: true } };
       }
       const tools = await manager.listTools(params.server);
       if (params.action === "list_tools") {
@@ -504,7 +583,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("mcp-configure", {
-    description: "Configure MCP authentication and environment variables",
+    description: "Configure MCP authentication, environment variables, and autostart",
     handler: async (_args, ctx) => {
       try { await configureServerWizard(ctx); }
       catch (error) { ctx.ui?.notify(`Could not configure MCP server: ${error instanceof Error ? error.message : String(error)}`, "error"); }

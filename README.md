@@ -10,13 +10,14 @@ console without bundling a full Pi MCP adapter.
 - `/mcp-add` — open a wizard for adding a local command or remote HTTP server,
   including environment variables and authentication.
 - `/mcp-configure` — update an existing server's environment variables, bearer
-  authentication, working directory, and HTTP headers.
+  authentication, working directory, HTTP headers, and autostart behavior.
 - `/mcp-remove` — choose and remove a server from the project or global config.
 - `/mcp-test` — choose a server, inspect its tools and input schema, enter JSON
   arguments, and execute a tool manually.
 
 The add wizard writes either the project `.mcp.json` or the user-global
-`~/.config/mcp/mcp.json`, then reloads Pi. `/mcp-test` starts MCP connections
+`~/.config/mcp/mcp.json`, then reloads Pi. Servers with `autostart: true` are
+connected and their tools discovered when Pi starts. `/mcp-test` starts MCP connections
 lazily, discovers and caches tools for five minutes, retries a failed operation
 once by reconnecting, and supports bearer tokens through an environment
 variable. MCP tools are available manually through `/mcp-test` and to the agent through

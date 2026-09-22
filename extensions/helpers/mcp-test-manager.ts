@@ -2,7 +2,7 @@ import { Client, StreamableHTTPClientTransport, type CallToolResult, type ListTo
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import type { ServerDefinition } from "../utils/mcp.ts";
 
-export type TestServerStatus = "connected" | "cached" | "failed" | "not-connected";
+export type TestServerStatus = "connected" | "cached" | "failed" | "not-connected" | "disabled";
 
 export interface TestServer {
   name: string;

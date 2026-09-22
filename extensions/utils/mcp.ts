@@ -8,6 +8,7 @@ export interface ServerDefinition {
   bearerToken?: string;
   bearerTokenEnv?: string;
   disabled?: boolean;
+  autostart?: boolean;
 }
 
 export interface McpFileConfig {
