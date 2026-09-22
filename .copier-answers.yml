@@ -1,6 +1,7 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: d840626
+_commit: d008738
 _src_path: git@github.com:walruskhan/copier-templates.git
+github_username: walruskhan
 pi_description: MCP Extension for pi
 pi_project_name: pi-mcp
 template: pi-extension

@@ -61,6 +61,15 @@ extensions/
 Each directory has a README describing its modules. `extensions/utils/` is
 kept deterministic and free of I/O so it can be unit tested directly.
 
+## Installation
+```bash
+# Latest
+pi install git:github.com/walruskhan/pi-mcp
+
+# Tagged versioned
+pi install git:github.com/walruskhan/pi-mcp@v0.1.0
+```
+
 ## Development
 
 Prerequisites: [Devbox](https://www.jetify.com/devbox). It provides Node.js,
@@ -89,12 +98,20 @@ git init
 git add .
 git commit -m "Initial Pi extension"
 git branch -M main
-git remote add origin git@github.com:YOUR_USER/pi-mcp.git
+git remote add origin git@github.com:walruskhan/pi-mcp.git
 git push -u origin main
 ```
 
-Pi can install a tagged package from GitHub:
-
+Create a version tag:
 ```bash
-pi install git:github.com/YOUR_USER/pi-mcp@v0.1.0
+# View tagged versions
+git tag
+
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Users can then install tagged version:
+```bash
+pi install git:github.com/walruskhan/pi-mcp@v0.1.0
 ```
