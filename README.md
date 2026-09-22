@@ -1,10 +1,39 @@
 # pi-mcp
 
-MCP Extension for pi
+Lightweight MCP server management extension for [Pi](https://pi.dev). It
+manages standard MCP configuration files and provides a manual MCP test
+console without bundling a full Pi MCP adapter.
 
-A starter [Pi](https://github.com/badlogic/pi-mono) extension written in
-TypeScript. The entrypoint is `extensions/main.ts`; replace the example
-command with the behavior your extension provides.
+## Commands
+
+- `/mcp` — list configured MCP servers and the lightweight runtime status.
+- `/mcp-add` — open a wizard for adding a local command or remote HTTP server,
+  including environment variables and authentication.
+- `/mcp-configure` — update an existing server's environment variables, bearer
+  authentication, working directory, and HTTP headers.
+- `/mcp-remove` — choose and remove a server from the project or global config.
+- `/mcp-test` — choose a server, inspect its tools and input schema, enter JSON
+  arguments, and execute a tool manually.
+
+The add wizard writes either the project `.mcp.json` or the user-global
+`~/.config/mcp/mcp.json`, then reloads Pi. `/mcp-test` starts MCP connections
+lazily, discovers and caches tools for five minutes, retries a failed operation
+once by reconnecting, and supports bearer tokens through an environment
+variable. MCP tools are available manually through `/mcp-test` and to the agent through
+one lightweight `mcp` gateway tool. The gateway workflow is:
+`list_servers` → `list_tools` → `describe` (optional) → `call`.
+
+Command servers accept any executable and arguments, including for example:
+
+```text
+uvx mcp-server-git --repository /path/to/repo
+npx -y @modelcontextprotocol/server-filesystem /tmp
+pnpm dlx @modelcontextprotocol/server-memory
+pipx run mcp-server-fetch
+```
+
+Only add commands and URLs you trust: command servers run with the permissions
+of the Pi process, and remote servers may receive data from MCP requests.
 
 ## Development
 
@@ -27,16 +56,6 @@ loaded from the repository root with:
 pi -e ./extensions/main.ts
 ```
 
-Add tests under `test/` and update the `test` script in `package.json` as the
-extension grows. `just secrets` scans staged files for accidentally committed
-secrets.
-
-## Git hooks
-
-Run `just install-hooks` once after cloning. The pre-commit hook scans staged
-files for secrets and checks TypeScript syntax. The pre-push hook runs linting
-and tests.
-
 ## Publish
 
 ```bash
@@ -53,8 +72,3 @@ Pi can install a tagged package from GitHub:
 ```bash
 pi install git:github.com/YOUR_USER/pi-mcp@v0.1.0
 ```
-
-## Template
-
-Generated from [copier-templates](https://github.com/walruskhan/copier-templates)
-(`pi-extension`). Pull template changes with `copier update`.
